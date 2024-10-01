@@ -1,98 +1,72 @@
-package com.example.xdsapp.service;
-
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
-import java.util.Map;
-
 @Service
-public class XdsConnectionService {
+public class XDSConnectionService {
 
     private final RestTemplate restTemplate;
 
-    // Inject RestTemplate via constructor
-    public XdsConnectionService(RestTemplate restTemplate) {
+    @Autowired
+    public XDSConnectionService(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
     }
 
-    // Method to accept an already populated map (key-value pairs from XML)
-    private Map<String, String> getMap() {
-        // Assume this map comes from XML parsing
-        return Map.of(
-            "YieldCurve/EUR/ESTER/1D", "SwapCurve/official/${DATE}/LONDON/CLOSE/EUR/ESTER/1D/MSSEOD",
-            "YieldCurve/EUR/EURIB/6M", "SwapCurve/official/${DATE}/LONDON/CLOSE/EUR/EURI6/6M/MSSEOD"
-            // Add other key-value pairs as per actual XML parsing
-        );
-    }
+    public List<SwapRate> getSwapRatesFromXds(Map<String, String> dataMap, String username, String password, String date) {
+        List<SwapRate> swapRatesList = new ArrayList<>();
+        String baseUrl = "https://xds-int.systems.uk.hsbc/api/v1/documents/";
 
-    public void processYieldCurveData(String date, String username, String password) {
-        Map<String, String> dataMap = getMap(); // Get the already populated map
-
-        // Iterate through the map and process only the "YieldCurve" entries
+        // Loop through the dataMap to process each entry
         for (Map.Entry<String, String> entry : dataMap.entrySet()) {
-            if (entry.getKey().startsWith("YieldCurve")) {
-                // Replace ${DATE} in the URL with the provided date
-                String firstUrl = entry.getValue().replace("${DATE}", date);
-                String baseUrl = "https://xds-int.systems.uk.hsbc/api/v1/documents/";
+            String key = entry.getKey();
+            String value = entry.getValue();
 
-                // Complete first URL (from SwapCurve)
-                String completeFirstUrl = baseUrl + firstUrl;
-                System.out.println("First URL: " + completeFirstUrl);
+            // Check if the key starts with "YieldCurve"
+            if (key.startsWith("YieldCurve")) {
+                // Form the first URL (SwapCurve URL)
+                String url1 = baseUrl + value.replace("${DATE}", date);
 
-                // Fetch data from the first URL
-                String assetValue = fetchDataFromXds(completeFirstUrl, username, password);
+                // Make the first request to get SwapCurve data
+                String swapCurveResponse = getDataFromXds(url1, username, password);
 
-                // Generate the second URL based on asset value and change "SwapCurve" to "SwapRates"
-                String secondUrl = firstUrl.replace("SwapCurve", "SwapRates");
-                secondUrl = secondUrl.substring(0, secondUrl.lastIndexOf('/') + 1) + assetValue + "_ABB/MSSEOD";
-                String completeSecondUrl = baseUrl + secondUrl;
+                // Parse the response to extract assetName
+                String assetName = parseAssetNameFromResponse(swapCurveResponse);
 
-                System.out.println("Second URL: " + completeSecondUrl);
+                // Form the second URL (SwapRates URL)
+                String url2 = url1.replace("SwapCurve", "SwapRates").replace("MSSEOD", assetName + "/MSSEOD");
 
-                // Fetch data from the second URL and parse it
-                fetchAndParseXdsData(completeSecondUrl, username, password);
+                // Make the second request to get SwapRates data
+                String swapRatesResponse = getDataFromXds(url2, username, password);
+
+                // Parse the SwapRates response and store data in SwapRate class
+                SwapRate swapRate = parseSwapRatesFromResponse(swapRatesResponse);
+                swapRatesList.add(swapRate);
             }
         }
+
+        return swapRatesList;
     }
 
-    // Method to fetch data from the XDS system using the complete URL
-    private String fetchDataFromXds(String url, String username, String password) {
-        // Setup headers for Basic Authentication
+    private String getDataFromXds(String url, String username, String password) {
         HttpHeaders headers = new HttpHeaders();
-        headers.setBasicAuth(username, password);
-
-        // Create an HTTP entity with headers
+        String auth = username + ":" + password;
+        byte[] encodedAuth = Base64.getEncoder().encode(auth.getBytes());
+        String authHeader = "Basic " + new String(encodedAuth);
+        headers.set("Authorization", authHeader);
         HttpEntity<String> entity = new HttpEntity<>(headers);
 
-        // Make the HTTP GET request
+        // Make the GET request
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-
-        // Log response for debugging purposes
-        System.out.println("Response from first URL: " + response.getBody());
-
-        // For simplicity, return a dummy asset value (replace this with actual logic)
-        return "EUR_EURIB12M_EURIB6M";
+        return response.getBody();
     }
 
-    // Method to fetch and parse data from the second XDS URL
-    private void fetchAndParseXdsData(String url, String username, String password) {
-        // Setup headers for Basic Authentication
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBasicAuth(username, password);
+    private String parseAssetNameFromResponse(String swapCurveResponse) {
+        // Logic to parse the XML response and extract the assetName
+        // For example, use an XML parser to find the 'assetName' element
+        return ""; // Return the parsed assetName
+    }
 
-        // Create an HTTP entity with headers
-        HttpEntity<String> entity = new HttpEntity<>(headers);
-
-        // Make the HTTP GET request to the second URL
-        ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-
-        // Log response for debugging purposes
-        System.out.println("Response from second URL: " + response.getBody());
-
-        // Here, parse the response and map it to your XdsData class
-        // Implement the parsing logic based on the response structure
+    private SwapRate parseSwapRatesFromResponse(String swapRatesResponse) {
+        // Logic to parse the SwapRates response and populate a SwapRate object
+        // This includes extracting terms, midRates, spreads, etc.
+        SwapRate swapRate = new SwapRate();
+        // Populate SwapRate object with parsed values
+        return swapRate;
     }
 }
