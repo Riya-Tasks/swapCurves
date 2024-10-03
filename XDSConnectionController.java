@@ -1,3 +1,12 @@
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import java.util.ArrayList;
+import java.util.List;
+import org.w3c.dom.Node;
+
 @RestController
 @RequestMapping("/api") // Optional base path for better organization
 public class XDSConnectionController {
@@ -17,10 +26,12 @@ public class XDSConnectionController {
         this.xmlParserService = xmlParserService;
     }
 
-    @GetMapping("/connect")
-    public ResponseEntity<List<SwapRate>> connectToXds(
-            @RequestParam String fileName,
-            @RequestParam String date) {
+    @GetMapping("/swap-rates")
+public ResponseEntity<List<SwapRate>> getSwapRates(
+    @RequestParam Map<String, String> dataMap,
+    @RequestParam String username,
+    @RequestParam String password,
+    @RequestParam String date) {
         try {
             // Get the parsed dataMap from XMLParserService
             Map<String, String> dataMap = xmlParserService.parseXMLFromResources(fileName);

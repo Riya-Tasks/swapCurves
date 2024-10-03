@@ -435,59 +435,72 @@ public class XDSConnectionService {
         return assetNames;
     }
 
-    // Updated method to format output as requested
-    private String parseSwapRatesFromResponse(String swapRatesResponse) {
-        List<String> swapRateEntries = new ArrayList<>();
+    private SwapRate parseSwapRatesFromResponse(String swapRatesResponse) {
+      SwapRate swapRate = new SwapRate();
+      List<String> terms = new ArrayList<>();
+      List<Double> midRates = new ArrayList<>();
+      List<Double> spreads = new ArrayList<>();
 
-        try {
-            // Parse the response string into an XML Document
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document document = builder.parse(new ByteArrayInputStream(swapRatesResponse.getBytes()));
+      try {
+          // Parse the response string into an XML Document
+          DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+          DocumentBuilder builder = factory.newDocumentBuilder();
+          Document document = builder.parse(new ByteArrayInputStream(swapRatesResponse.getBytes()));
 
-            // Normalize the XML structure
-            document.getDocumentElement().normalize();
+          document.getDocumentElement().normalize();
 
-            // Locate the SwapRates element
-            NodeList swapRatesList = document.getElementsByTagName("SwapRates");
-            if (swapRatesList.getLength() > 0) {
-                Element swapRatesElement = (Element) swapRatesList.item(0);
+          // Locate the SwapRates element
+          NodeList swapRatesList = document.getElementsByTagName("SwapRates");
+          if (swapRatesList.getLength() > 0) {
+              Element swapRatesElement = (Element) swapRatesList.item(0);
 
-                // Extract <Quote> elements and get terms, midRates, and spreads
-                NodeList quoteList = swapRatesElement.getElementsByTagName("Quote");
-                for (int i = 0; i < quoteList.getLength(); i++) {
-                    Node quoteNode = quoteList.item(i);
-                    if (quoteNode.getNodeType() == Node.ELEMENT_NODE) {
-                        Element quoteElement = (Element) quoteNode;
+              // Set additional fields
+              swapRate.setLocation(swapRatesElement.getAttribute("location"));
+              swapRate.setMarketTime(swapRatesElement.getAttribute("marketTime"));
+              swapRate.setCurrency(swapRatesElement.getAttribute("ccy"));
+              swapRate.setRateFixingIndex(swapRatesElement.getAttribute("rateFixingIndex"));
+              swapRate.setIndexTerm(swapRatesElement.getAttribute("indexTerm"));
+              swapRate.setName(swapRatesElement.getAttribute("name"));
 
-                        // Extract term, midRate, and spread attributes
-                        String term = quoteElement.getAttribute("term");
-                        String midRateStr = quoteElement.getAttribute("midRate");
-                        String spreadStr = quoteElement.getAttribute("spread");
+              // Extract <Quote> elements and get terms, midRates, and spreads
+              NodeList quoteList = swapRatesElement.getElementsByTagName("Quote");
+              for (int i = 0; i < quoteList.getLength(); i++) {
+                  Node quoteNode = quoteList.item(i);
+                  if (quoteNode.getNodeType() == Node.ELEMENT_NODE) {
+                      Element quoteElement = (Element) quoteNode;
 
-                        // Parse midRate and spread as doubles, handle possible NumberFormatExceptions
-                        try {
-                            double midRate = Double.parseDouble(midRateStr);
-                            double spread = Double.parseDouble(spreadStr);
+                      // Extract term, midRate, and spread attributes
+                      String term = quoteElement.getAttribute("term");
+                      String midRateStr = quoteElement.getAttribute("midRate");
+                      String spreadStr = quoteElement.getAttribute("spread");
 
-                            // Format each term, midRate, spread set as "[term, midRate, spread]"
-                            String formattedEntry = String.format("[%s, %.5f, %.5f]", term, midRate, spread);
-                            swapRateEntries.add(formattedEntry);
-                        } catch (NumberFormatException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                }
-            }
+                      terms.add(term);
 
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+                      // Parse midRate and spread as doubles, handle possible NumberFormatExceptions
+                      try {
+                          double midRate = Double.parseDouble(midRateStr);
+                          double spread = Double.parseDouble(spreadStr);
 
-        // Join all entries with commas and return a single string
-        return String.join(", ", swapRateEntries);
-    }
-}
+                          midRates.add(midRate);
+                          spreads.add(spread);
+                      } catch (NumberFormatException e) {
+                          e.printStackTrace();
+                      }
+                  }
+              }
+
+              // Set terms, midRates, and spreads in the SwapRate object
+              swapRate.setTerms(terms);
+              swapRate.setMidRates(midRates);
+              swapRate.setSpreads(spreads);
+          }
+
+      } catch (Exception e) {
+          e.printStackTrace();
+      }
+
+      return swapRate;
+  }
 
 //     }
 // }
