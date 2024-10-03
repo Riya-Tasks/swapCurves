@@ -334,7 +334,8 @@
 //         }
 //
 //         return swapRate;
-
+//     }
+// }
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -344,6 +345,14 @@ import org.w3c.dom.NodeList;
 import java.util.ArrayList;
 import java.util.List;
 import org.w3c.dom.Node;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.*;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Map;
 
 @Service
 public class XDSConnectionService {
@@ -355,8 +364,8 @@ public class XDSConnectionService {
         this.restTemplate = restTemplate;
     }
 
-    public List<String> getSwapRatesFromXds(Map<String, String> dataMap, String username, String password, String date) {
-        List<String> formattedSwapRatesList = new ArrayList<>();
+    public List<SwapRate> getSwapRatesFromXds(Map<String, String> dataMap, String username, String password, String date) {
+        List<SwapRate> swapRatesList = new ArrayList<>();
         String baseUrl = "https://xds-int.systems.uk.hsbc/api/v1/documents/";
 
         // Loop through the dataMap to process each entry
@@ -383,14 +392,14 @@ public class XDSConnectionService {
                     // Make the second request to get SwapRates data
                     String swapRatesResponse = getDataFromXds(url2, username, password);
 
-                    // Parse and format the SwapRates response into the desired format
-                    String formattedSwapRates = parseSwapRatesFromResponse(swapRatesResponse);
-                    formattedSwapRatesList.add(formattedSwapRates); // Add formatted swap rate string to the list
+                    // Parse the SwapRates response and store data in SwapRate class
+                    SwapRate swapRate = parseSwapRatesFromResponse(swapRatesResponse);
+                    swapRatesList.add(swapRate);
                 }
             }
         }
 
-        return formattedSwapRatesList;
+        return swapRatesList;
     }
 
     private String getDataFromXds(String url, String username, String password) {
@@ -406,6 +415,7 @@ public class XDSConnectionService {
         return response.getBody();
     }
 
+    // Update to return List<String> for multiple asset names
     private List<String> parseAssetNamesFromResponse(String swapCurveResponse) {
         List<String> assetNames = new ArrayList<>();
         try {
@@ -432,75 +442,76 @@ public class XDSConnectionService {
             e.printStackTrace();
         }
 
+        // Return all found asset names
         return assetNames;
     }
 
+    // Method remains the same as before
     private SwapRate parseSwapRatesFromResponse(String swapRatesResponse) {
-      SwapRate swapRate = new SwapRate();
-      List<String> terms = new ArrayList<>();
-      List<Double> midRates = new ArrayList<>();
-      List<Double> spreads = new ArrayList<>();
+        SwapRate swapRate = new SwapRate();
+        List<String> terms = new ArrayList<>();
+        List<Double> midRates = new ArrayList<>();
+        List<Double> spreads = new ArrayList<>();
 
-      try {
-          // Parse the response string into an XML Document
-          DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-          DocumentBuilder builder = factory.newDocumentBuilder();
-          Document document = builder.parse(new ByteArrayInputStream(swapRatesResponse.getBytes()));
+        try {
+            // Parse the response string into an XML Document
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document document = builder.parse(new ByteArrayInputStream(swapRatesResponse.getBytes()));
 
-          document.getDocumentElement().normalize();
+            // Normalize the XML structure
+            document.getDocumentElement().normalize();
 
-          // Locate the SwapRates element
-          NodeList swapRatesList = document.getElementsByTagName("SwapRates");
-          if (swapRatesList.getLength() > 0) {
-              Element swapRatesElement = (Element) swapRatesList.item(0);
+            // Locate the SwapRates element
+            NodeList swapRatesList = document.getElementsByTagName("SwapRates");
+            if (swapRatesList.getLength() > 0) {
+                Element swapRatesElement = (Element) swapRatesList.item(0);
 
-              // Set additional fields
-              swapRate.setLocation(swapRatesElement.getAttribute("location"));
-              swapRate.setMarketTime(swapRatesElement.getAttribute("marketTime"));
-              swapRate.setCurrency(swapRatesElement.getAttribute("ccy"));
-              swapRate.setRateFixingIndex(swapRatesElement.getAttribute("rateFixingIndex"));
-              swapRate.setIndexTerm(swapRatesElement.getAttribute("indexTerm"));
-              swapRate.setName(swapRatesElement.getAttribute("name"));
+                // Populate basic SwapRate fields
+                swapRate.setLocation(swapRatesElement.getAttribute("location"));
+                swapRate.setMarketTime(swapRatesElement.getAttribute("marketTime"));
+                swapRate.setCurrency(swapRatesElement.getAttribute("ccy"));
+                swapRate.setRateFixingIndex(swapRatesElement.getAttribute("rateFixingIndex"));
+                swapRate.setIndexTerm(swapRatesElement.getAttribute("indexTerm"));
+                swapRate.setName(swapRatesElement.getAttribute("name"));
 
-              // Extract <Quote> elements and get terms, midRates, and spreads
-              NodeList quoteList = swapRatesElement.getElementsByTagName("Quote");
-              for (int i = 0; i < quoteList.getLength(); i++) {
-                  Node quoteNode = quoteList.item(i);
-                  if (quoteNode.getNodeType() == Node.ELEMENT_NODE) {
-                      Element quoteElement = (Element) quoteNode;
+                // Extract <Quote> elements and get terms, midRates, and spreads
+                NodeList quoteList = swapRatesElement.getElementsByTagName("Quote");
+                for (int i = 0; i < quoteList.getLength(); i++) {
+                    Node quoteNode = quoteList.item(i);
+                    if (quoteNode.getNodeType() == Node.ELEMENT_NODE) {
+                        Element quoteElement = (Element) quoteNode;
 
-                      // Extract term, midRate, and spread attributes
-                      String term = quoteElement.getAttribute("term");
-                      String midRateStr = quoteElement.getAttribute("midRate");
-                      String spreadStr = quoteElement.getAttribute("spread");
+                        // Extract term, midRate, and spread attributes
+                        String term = quoteElement.getAttribute("term");
+                        String midRateStr = quoteElement.getAttribute("midRate");
+                        String spreadStr = quoteElement.getAttribute("spread");
 
-                      terms.add(term);
+                        terms.add(term);
 
-                      // Parse midRate and spread as doubles, handle possible NumberFormatExceptions
-                      try {
-                          double midRate = Double.parseDouble(midRateStr);
-                          double spread = Double.parseDouble(spreadStr);
+                        // Parse midRate and spread as doubles, handle possible NumberFormatExceptions
+                        try {
+                            double midRate = Double.parseDouble(midRateStr);
+                            double spread = Double.parseDouble(spreadStr);
 
-                          midRates.add(midRate);
-                          spreads.add(spread);
-                      } catch (NumberFormatException e) {
-                          e.printStackTrace();
-                      }
-                  }
-              }
+                            midRates.add(midRate);
+                            spreads.add(spread);
+                        } catch (NumberFormatException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
 
-              // Set terms, midRates, and spreads in the SwapRate object
-              swapRate.setTerms(terms);
-              swapRate.setMidRates(midRates);
-              swapRate.setSpreads(spreads);
-          }
+            // Set terms, midRates, and spreads in the SwapRate object
+            swapRate.setTerms(terms);
+            swapRate.setMidRates(midRates);
+            swapRate.setSpreads(spreads);
 
-      } catch (Exception e) {
-          e.printStackTrace();
-      }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
-      return swapRate;
-  }
-
-//     }
-// }
+        return swapRate;
+    }
+}
